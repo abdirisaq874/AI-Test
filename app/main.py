@@ -1,59 +1,86 @@
+"""
+Main application file for the Enhanced AI Creation Studio
+"""
+import streamlit as st
 import logging
-from typing import Dict
-
-from ontology_dc8f06af066e4a7880a5938933236037.config import ConfigClass
-from ontology_dc8f06af066e4a7880a5938933236037.input import InputClass
-from ontology_dc8f06af066e4a7880a5938933236037.output import OutputClass
-from openfabric_pysdk.context import AppModel, State
+from vector_store import load_vector_store, create_or_load_vector_store, add_to_vector_store
+from memory import load_memory
+from llm import init_llm
+from ui import render_creation_tab, render_memory_browser, render_advanced_tab
 from core.stub import Stub
+from config import configurations
 
-# Configurations for the app
-configurations: Dict[str, ConfigClass] = dict()
+# Set page config first - MUST BE CALLED BEFORE ANY OTHER STREAMLIT COMMAND
+st.set_page_config(
+    page_title="Enhanced AI Creation Studio",
+    page_icon="🚀",
+    layout="wide"
+)
 
-############################################################
-# Config callback function
-############################################################
-def config(configuration: Dict[str, ConfigClass], state: State) -> None:
-    """
-    Stores user-specific configuration data.
+# Configure logging
+logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    handlers=[logging.FileHandler("app.log"), logging.StreamHandler()])
+logger = logging.getLogger(__name__)
 
-    Args:
-        configuration (Dict[str, ConfigClass]): A mapping of user IDs to configuration objects.
-        state (State): The current state of the application (not used in this implementation).
-    """
-    for uid, conf in configuration.items():
-        logging.info(f"Saving new config for user with id:'{uid}'")
-        configurations[uid] = conf
+# Initialize session state
+def init_session_state():
+    if 'llm' not in st.session_state:
+        st.session_state.llm = init_llm()
+        
+    if 'history' not in st.session_state:
+        st.session_state.history = []
+    
+    if 'memory_db' not in st.session_state:
+        st.session_state.memory_db = []
+    
+    if 'conversation_memory' not in st.session_state:
+        from langchain.memory import ConversationBufferMemory
+        st.session_state.conversation_memory = ConversationBufferMemory(memory_key="chat_history")
+    
+    if 'vector_store' not in st.session_state:
+        # Create or load vector store
+        try:
+            st.session_state.vector_store = load_vector_store()
+            logger.info("Vector store loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load vector store: {str(e)}")
+            st.session_state.vector_store = None
 
-
-############################################################
-# Execution callback function
-############################################################
-def execute(model: AppModel) -> None:
-    """
-    Main execution entry point for handling a model pass.
-
-    Args:
-        model (AppModel): The model object containing request and response structures.
-    """
-
-    # Retrieve input
-    request: InputClass = model.request
-
-    # Retrieve user config
-    user_config: ConfigClass = configurations.get('super-user', None)
-    logging.info(f"{configurations}")
-
-    # Initialize the Stub with app IDs
+def main():
+    """Main application function"""
+    st.title("🚀 Enhanced AI Creation Studio")
+    st.subheader("Turn your ideas into stunning images and 3D models with intelligent memory")
+    
+    # Initialize session state
+    init_session_state()
+    
+    # Load existing memories if not already loaded
+    if len(st.session_state.memory_db) == 0:
+        memories = load_memory()
+        if memories:
+            st.session_state.memory_db = memories
+            # Add memories to vector store if needed
+            if st.session_state.vector_store is None:
+                st.session_state.vector_store = create_or_load_vector_store()
+                for memory in memories:
+                    add_to_vector_store(memory)
+    
+    # Get app IDs to pass into the creation tab
+    user_config = configurations.get('super-user')
     app_ids = user_config.app_ids if user_config else []
-    stub = Stub(app_ids)
+    
+    # Navigation tabs
+    tab1, tab2, tab3 = st.tabs(["Create", "Memory Browser", "Advanced"])
+    
+    with tab1:
+        render_creation_tab(app_ids)
+    
+    with tab2:
+        render_memory_browser()
+    
+    with tab3:
+        render_advanced_tab()
 
-    # ------------------------------
-    # TODO : add your magic here
-    # ------------------------------
-
-
-
-    # Prepare response
-    response: OutputClass = model.response
-    response.message = f"Echo: {request.prompt}"
+if __name__ == "__main__":
+    main()

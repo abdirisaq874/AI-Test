@@ -45,24 +45,31 @@ class Stub:
 
             try:
                 # Fetch manifest
+                print(f"[{base_url}] Fetching manifest...")
+                logging.info(f"[{base_url}] Fetching manifest...")
                 manifest = requests.get(f"https://{base_url}/manifest", timeout=5).json()
                 logging.info(f"[{app_id}] Manifest loaded: {manifest}")
+                print(f"[{app_id}] Manifest loaded: {manifest}")
                 self._manifest[app_id] = manifest
 
                 # Fetch input schema
                 input_schema = requests.get(f"https://{base_url}/schema?type=input", timeout=5).json()
                 logging.info(f"[{app_id}] Input schema loaded: {input_schema}")
+                print(f"[{app_id}] Input schema loaded: {input_schema}")
 
                 # Fetch output schema
                 output_schema = requests.get(f"https://{base_url}/schema?type=output", timeout=5).json()
                 logging.info(f"[{app_id}] Output schema loaded: {output_schema}")
+                print(f"[{app_id}] Output schema loaded: {output_schema}")
                 self._schema[app_id] = (input_schema, output_schema)
 
                 # Establish Remote WebSocket connection
                 self._connections[app_id] = Remote(f"wss://{base_url}/app", f"{app_id}-proxy").connect()
                 logging.info(f"[{app_id}] Connection established.")
+                print(f"[{app_id}] Connection established.")
             except Exception as e:
                 logging.error(f"[{app_id}] Initialization failed: {e}")
+                print(f"[{app_id}] Initialization failed: {e}")
 
     # ----------------------------------------------------------------------
     def call(self, app_id: str, data: Any, uid: str = 'super-user') -> dict:
@@ -81,19 +88,24 @@ class Stub:
             Exception: If no connection is found for the provided app ID, or execution fails.
         """
         connection = self._connections.get(app_id)
+        logging.debug(f"[{app_id}] Connection: {connection}")
+        print(f"[{app_id}] Connection: {connection}")
         if not connection:
             raise Exception(f"Connection not found for app ID: {app_id}")
 
         try:
             handler = connection.execute(data, uid)
             result = connection.get_response(handler)
+            logging.info(f"[{app_id}] Execution result: {result}")
 
             schema = self.schema(app_id, 'output')
             marshmallow = json_schema_to_marshmallow(schema)
             handle_resources = has_resource_fields(marshmallow())
 
             if handle_resources:
-                result = resolve_resources("https://" + app_id + "/resource?reid={reid}", result, marshmallow())
+                resource_url = f"https://{app_id}/resource?reid={{reid}}"
+                logging.info(f"Attempting to resolve resources using URL template: {resource_url}")
+                result = resolve_resources(resource_url, result, marshmallow())
 
             return result
         except Exception as e:

@@ -1,19 +1,38 @@
 FROM openfabric/tee-python-cpu:dev
 
-# Copy only necessary files for Poetry installation
-COPY pyproject.toml ./
+# Copy Poetry config files only
+COPY pyproject.toml poetry.lock* ./
 
-# Install dependencies using Poetry
+# Upgrade pip and install Poetry
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install --upgrade poetry && \
-    python3 -m poetry install --only main && \
-    rm -rf ~/.cache/pypoetry/{cache,artifacts}
+    poetry config virtualenvs.create false && \
+    poetry install --only main && \
+    rm -rf ~/.cache/pypoetry/{cache,artifacts} ~/.cache/pip
 
-# Copy the rest of the source code into the container
+# Install additional Python packages
+RUN python3 -m pip install \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 && \
+    transformers \
+    streamlit \
+    langchain \
+    langchain_community \
+    sentence-transformers \
+    accelerate \
+    faiss-gpu \
+    faiss-cpu \
+    chromadb
+
+# Copy the full application source code
 COPY . .
 
-# Expose port 5000 for the Flask app
-EXPOSE 8888
+# Expose the port for Streamlit
+EXPOSE 8501
 
-# Start the Flask app using the start.sh script
-CMD ["sh","start.sh"]
+# Environment variables for Streamlit
+ENV STREAMLIT_SERVER_PORT=8501
+ENV STREAMLIT_SERVER_HEADLESS=true
+ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
+
+# Start Streamlit application
+CMD ["streamlit", "run", "main.py"]

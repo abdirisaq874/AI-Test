@@ -1,5 +1,5 @@
 from typing import Optional, Union
-
+import logging
 from openfabric_pysdk.helper import Proxy
 from openfabric_pysdk.helper.proxy import ExecutionResult
 
@@ -54,7 +54,7 @@ class Remote:
         """
         if self.client is None:
             return None
-
+        logging.info(f"Executing request with UID: {uid}")
         return self.client.request(inputs, uid)
 
     # ----------------------------------------------------------------------
